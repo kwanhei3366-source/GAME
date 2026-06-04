@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>三明治叠叠乐</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+     
+      <script src="script.js"></script>
+  </body>
+</html><!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>魔性三明治叠叠乐 🍞</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            background: #f0f3f5;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+        #game-container {
+            position: relative;
+            width: 400px;
+            height: 600px;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow: hidden;
+            border: 4px solid #333;
+        }
+        #canvas {
+            background: linear-gradient(to bottom, #e0f2fe, #f0f9ff);
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            pointer-events: none;
+            z-index: 10;
+        }
+        #score {
+            font-size: 48px;
+            font-weight: 900;
+            color: #2c3e50;
+            text-shadow: 2px 2px 0 #fff;
+        }
+        #tip {
+            font-size: 14px;
+            color: #7f8c8d;
+            margin-top: 5px;
+            background: rgba(255,255,255,0.8);
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+        }
+        #start-screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 255, 255, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            transition: all 0.3s;
+        }
+        .btn {
+            padding: 12px 32px;
+            font-size: 18px;
+            font-weight: bold;
+            background: #ff7675;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(255,118,117,0.4);
+            transition: transform 0.1s;
+        }
+        .btn:active {
+            transform: scale(0.95);
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 28px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="ui">
+            <div id="score">0</div>
+            <div id="tip">点击屏幕让面包落下！</div>
+        </div>
+
+        <div id="start-screen">
+            <h1 id="title">🍞 三明治叠叠乐</h1>
+            <button class="btn" id="start-btn">开始游戏</button>
+        </div>
+
+        <canvas id="canvas" width="400" height="600"></canvas>
+    </div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const startScreen = document.getElementById('start-screen');
+const startBtn = document.getElementById('start-btn');
+const titleEl = document.getElementById('title');
+
+// 游戏配置与状态
+const LAYER_HEIGHT = 30; // 每层面包的高度
+const CAMERA_SPEED = 0.1; // 镜头跟随速度
+
+let gameActive = false;
+let score = 0;
+let layers = []; // 已经固定好的面包层
+let currentLayer = {}; // 当前正在左右移动的面包
+let animationFrameId;
+let cameraY = 0; // 镜头滚动的偏移量
+let targetCameraY = 0;
+
+// 初始化/重置游戏
+function initGame() {
+    score = 0;
+    scoreEl.innerText = score;
+    cameraY = 0;
+    targetCameraY = 0;
+    
+    // 初始地基（第一块面包）
+    layers = [{
+        x: 100,
+        y: canvas.height - LAYER_HEIGHT - 20,
+        width: 200,
+        color: '#e67e22' // 吐司边颜色
+    }];
+    
+    spawnLayer();
+    gameActive = true;
+    startScreen.style.opacity = '0';
+    startScreen.style.pointerEvents = 'none';
+    
+    animate();
+}
+
+// 产生新的一层移动面包
+function spawnLayer() {
+    const lastLayer = layers[layers.length - 1];
+    const scoreMultiplier = Math.min(score, 20); // 随得分增加速度
+    
+    currentLayer = {
+        x: 0,
+        y: lastLayer.y - LAYER_HEIGHT,
+        width: lastLayer.width,
+        speed: (2 + scoreMultiplier * 0.3) * (Math.random() > 0.5 ? 1 : -1),
+        // 随机一点诱人的食物颜色（火腿、生菜、奶酪、面包）
+        color: getRandomColor() 
+    };
+
+    // 随着层数变高，计算镜头应该往上推多少
+    if (layers.length > 5) {
+        targetCameraY = (layers.length - 5) * LAYER_HEIGHT;
+    }
+}
+
+function getRandomColor() {
+    const colors = ['#ff7675', '#2ecc71', '#f1c40f', '#e67e22', '#fab1a0'];
+    return colors[Math.floor(Math.random() * colors.length)];
+}
+
+// 核心更新逻辑
+function update() {
+    if (!gameActive) return;
+
+    // 1. 移动当前面包
+    currentLayer.x += currentLayer.speed;
+    
+    // 碰壁反弹
+    if (currentLayer.x + currentLayer.width > canvas.width || currentLayer.x < 0) {
+        currentLayer.speed = -currentLayer.speed;
+    }
+
+    // 2. 丝滑镜头跟随
+    cameraY += (targetCameraY - cameraY) * CAMERA_SPEED;
+}
+
+// 绘制画面
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.save();
+    // 关键：通过 translate 实现镜头向上滚动，营造无限高的感觉
+    ctx.translate(0, cameraY);
+
+    // 绘制所有已固定层
+    layers.forEach((layer, index) => {
+        ctx.fillStyle = layer.color;
+        // 简单画个带圆角的面包片/食材
+        drawRoundRect(ctx, layer.x, layer.y, layer.width, LAYER_HEIGHT - 2, 6);
+        
+        // 给面包加个亮边，看起来更立体
+        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+        ctx.fillRect(layer.x, layer.y, layer.width, 4);
+    });
+
+    // 绘制当前正在移动的层
+    if (gameActive) {
+        ctx.fillStyle = currentLayer.color;
+        drawRoundRect(ctx, currentLayer.x, currentLayer.y, currentLayer.width, LAYER_HEIGHT - 2, 6);
+    }
+
+    ctx.restore();
+}
+
+// 辅助函数：画圆角矩形
+function drawRoundRect(ctx, x, y, width, height, radius) {
+    ctx.beginPath();
+    ctx.arc(x + radius, y + radius, radius, Math.PI, Math.PI * 1.5);
+    ctx.arc(x + width - radius, y + radius, radius, Math.PI * 1.5, 0);
+    ctx.arc(x + width - radius, y + height - radius, radius, 0, Math.PI * 0.5);
+    ctx.arc(x + radius, y + height - radius, radius, Math.PI * 0.5, Math.PI);
+    ctx.closePath();
+    ctx.fill();
+}
+
+// 游戏主循环
+function animate() {
+    update();
+    draw();
+    animationFrameId = requestAnimationFrame(animate);
+}
+
+// 处理玩家点击（裁剪面包的核心逻辑）
+function handleDrop() {
+    if (!gameActive) return;
+
+    const lastLayer = layers[layers.length - 1];
+    
+    // 计算当前层和上一层的重叠边界
+    const leftEdge = Math.max(currentLayer.x, lastLayer.x);
+    const rightEdge = Math.min(currentLayer.x + currentLayer.width, lastLayer.x + lastLayer.width);
+    const newWidth = rightEdge - leftEdge;
+
+    // 完美对齐的容错机制（差一点点就算完美对齐，体验更好）
+    const tolerance = 4;
+    
+    if (newWidth <= 0) {
+        // 完全没踩中，GG
+        gameOver();
+    } else {
+        // 成功叠上！
+        score++;
+        scoreEl.innerText = score;
+
+        // 如果接近完美，直接强制对齐
+        let finalX = leftEdge;
+        let finalWidth = newWidth;
+        if (Math.abs(currentLayer.x - lastLayer.x) < tolerance) {
+            finalX = lastLayer.x;
+            finalWidth = lastLayer.width;
+        }
+
+        // 把当前层加入固定阵列
+        layers.push({
+            x: finalX,
+            y: currentLayer.y,
+            width: finalWidth,
+            color: currentLayer.color
+        });
+
+        // 产生下一层
+        spawnLayer();
+    }
+}
+
+function gameOver() {
+    gameActive = false;
+    cancelAnimationFrame(animationFrameId);
+    
+    // 显示结束画面
+    titleEl.innerHTML = `游戏结束！<br><span style="font-size:20px;color:#7f8c8d;">你叠了 ${score} 层三明治</span>`;
+    startBtn.innerText = '再来一局';
+    startScreen.style.opacity = '1';
+    startScreen.style.pointerEvents = 'auto';
+}
+
+// 事件监听
+canvas.addEventListener('click', handleDrop);
+// 同时也支持空格键操作
+window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+        e.preventDefault();
+        if (gameActive) handleDrop();
+        else initGame();
+    }
+});
+startBtn.addEventListener('click', initGame);
+
+// 初始绘制一下背景
+draw();
+</script>
+</body>
+</html>
